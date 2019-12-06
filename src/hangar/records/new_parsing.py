@@ -269,109 +269,54 @@ The following records can be parsed:
 RawDataRecordKey = NamedTuple('RawDataRecordKey', [
     ('aset_name', str),
     ('data_name', Union[str, int])])
-RawDataRecordKey.__doc__ = 'Represents a Data Sample Record Key'
+DataDigest = NamedTuple('DataDigest', [('digest', str)])
 
 
-RawDataRecordVal = NamedTuple('RawDataRecordVal', [
-    ('data_hash', str)])
-RawDataRecordVal.__doc__ = 'Represents a Data Sample Record Hash Value'
+class RefDataKey(RawDataRecordKey):
+    __slots__ = ()
+
+    def __bytes__(self):
+        if isinstance(self.data_name, int):
+            raw = f'h:{self.aset_name}:#{self.data_name}'.encode()
+        else:
+            raw = f'h:{self.aset_name}:{self.data_name}'.encode()
+        return raw
+
+    @classmethod
+    def from_bytes(cls, raw):
+        key = raw.decode()
+        aset_name, data_name = key.replace('h:', '', 1).split(':')
+        if data_name.startswith('#'):
+            data_name = int(data_name.lstrip('#'))
+        return cls(aset_name, data_name)
 
 
-RawArraysetSchemaVal = NamedTuple('RawArraysetSchemaVal', [
-    ('schema_hash', str),
-    ('schema_dtype', int),
-    ('schema_is_var', bool),
-    ('schema_max_shape', tuple),
-    ('schema_is_named', bool),
-    ('schema_default_backend', str),
-    ('schema_default_backend_opts', dict)])
-RawArraysetSchemaVal.__doc__ = 'Information Specifying a Arrayset Schema'
+class RefDataVal(DataDigest):
+    __slots__ = ()
 
-"""
-Parsing functions to convert lmdb data record keys/vals to/from python vars
-----------------------------------------------------------------------------
-"""
+    def __bytes__(self):
+        return f'{self.digest}'.encode()
 
-# -------------------- db -> raw (python) -----------------------------
+    def __str__(self):
+        return self.digest
+
+    @classmethod
+    def from_bytes(cls, raw):
+        return cls(raw.decode())
 
 
-def data_record_raw_key_from_db_key(db_key: bytes) -> RawDataRecordKey:
-    """Convert and split a lmdb record key & value into python objects
+class HashDataKey(DataDigest):
+    __slots__ = ()
 
-    Parameters
-    ----------
-    db_key : bytes
-        full lmdb record key
+    def __bytes__(self):
+        return f'h:{self.digest}'.encode()
 
-    Returns
-    -------
-    RawDataRecordKey
-        Tuple containing the record aset_name, data_name
-    """
-    key = db_key.decode()
-    aset_name, data_name = key.replace(c.K_STGARR, '', 1).split(c.SEP_KEY)
-    if data_name.startswith(c.K_INT):
-        data_name = int(data_name.lstrip(c.K_INT))
-    return RawDataRecordKey(aset_name, data_name)
+    def __str__(self):
+        return self.digest
 
-
-def data_record_raw_val_from_db_val(db_val: bytes) -> RawDataRecordVal:
-    """Convert and split a lmdb record value into python objects
-
-    Parameters
-    ----------
-    db_val : bytes
-        full lmdb record value
-
-    Returns
-    -------
-    RawDataRecordVal
-        Tuple containing the record data_hash
-    """
-    data_hash = db_val.decode()
-    return RawDataRecordVal(data_hash)
-
-
-# -------------------- raw (python) -> db -----------------------------
-
-
-def data_record_db_key_from_raw_key(aset_name: str, data_name: Union[str, int]) -> bytes:
-    """converts a python record spec into the appropriate lmdb key
-
-    Parameters
-    ----------
-    aset_name : string
-        name of the arrayset for the record
-    data_name : Union[string, int]
-        name of the data sample for the record
-
-    Returns
-    -------
-    bytes
-        Byte encoded db record key
-    """
-    if isinstance(data_name, int):
-        record_key = f'{c.K_STGARR}{aset_name}{c.SEP_KEY}{c.K_INT}{data_name}'.encode()
-    else:
-        record_key = f'{c.K_STGARR}{aset_name}{c.SEP_KEY}{data_name}'.encode()
-    return record_key
-
-
-def data_record_db_val_from_raw_val(data_hash: str) -> bytes:
-    """convert a python record spec into the appropriate lmdb value
-
-    Parameters
-    ----------
-    data_hash : string
-        hash of the data sample
-
-    Returns
-    -------
-    bytestring
-        Byte encoded db record val.
-    """
-    record_val = f'{data_hash}'.encode()
-    return record_val
+    @classmethod
+    def from_bytes(cls, raw):
+        return cls(raw.decode().replace('h:', '', 1))
 
 
 """
@@ -379,31 +324,34 @@ Functions to convert arrayset schema records to/from python objects.
 --------------------------------------------------------------------
 """
 
-# ----------------- raw schema -> db schema -----------------------------
+RawArraysetSchemaKey = NamedTuple('RawArraysetSchemaKey', [('aset_name', str)])
+RawArraysetSchemaVal = NamedTuple('RawArraysetSchemaVal', [
+    ('schema_hash', str),
+    ('schema_dtype', int),
+    ('schema_is_var', bool),
+    ('schema_max_shape', tuple),
+    ('schema_is_named', bool),
+    ('schema_default_backend', str),
+    ('schema_default_backend_opts', dict)
+])
 
 
-def arrayset_record_schema_db_key_from_raw_key(aset_name):
-    """Get the db schema key for a named arrayset
+class RefSchemaKey(RawArraysetSchemaKey):
+    __slots__ = ()
 
-    Parameters
-    ----------
-    aset_name : string
-        the name of the arrayset whose schema is found.
+    def __bytes__(self) -> bytes:
+        raw = f's:{self.aset_name}'.encode()
+        return raw
 
-    Returns
-    -------
-    bytestring
-        the db_key which can be used to query the schema
-    """
-    db_schema_key = f'{c.K_SCHEMA}{aset_name}'.encode()
-    return db_schema_key
+    def __str__(self) -> str:
+        return self.aset_name
+
+    @classmethod
+    def from_bytes(cls, raw: bytes):
+        return cls(raw.decode().replace('s:', '', 1))
 
 
-def arrayset_record_schema_db_val_from_raw_val(schema_hash,
-                                               schema_is_var, schema_max_shape,
-                                               schema_dtype, schema_is_named,
-                                               schema_default_backend,
-                                               schema_default_backend_opts):
+class SchemaVal(RawArraysetSchemaVal):
     """Format the db_value which includes all details of the arrayset schema.
 
     Parameters
@@ -427,37 +375,33 @@ def arrayset_record_schema_db_val_from_raw_val(schema_hash,
         backend specification for the schema default backend.
     schema_default_backend_opts : dict
         filter options for the default schema backend writer.
-
-    Returns
-    -------
-    bytestring
-        Bytes encoded representation of the schema.
     """
-    schema_val = {
-        'schema_hash': schema_hash,
-        'schema_dtype': schema_dtype,
-        'schema_is_var': schema_is_var,
-        'schema_max_shape': schema_max_shape,
-        'schema_is_named': schema_is_named,
-        'schema_default_backend': schema_default_backend,
-        'schema_default_backend_opts': schema_default_backend_opts,
-    }
-    db_schema_val = json.dumps(schema_val, separators=(',', ':')).encode()
-    return db_schema_val
+    __slots__ = ()
+
+    def __bytes__(self) -> bytes:
+        sdict = self._asdict()
+        return json.dumps(sdict, separators=(',', ':'), sort_keys=True).encode()
+
+    @classmethod
+    def from_bytes(cls, raw: bytes):
+        sdict = json.loads(raw)
+        sdict['schema_max_shape'] = tuple(sdict['schema_max_shape'])
+        return cls(**sdict)
 
 
-# -------------- db schema -> raw schema -------------------------------
+class HashSchemaKey(DataDigest):
+    __slots__ = ()
 
-def arrayset_record_schema_raw_key_from_db_key(db_key: bytes) -> str:
-    aset_name = db_key.decode().replace(c.K_SCHEMA, '', 1)
-    return aset_name
+    def __bytes__(self) -> bytes:
+        return f's:{self.digest}'.encode()
 
+    @classmethod
+    def from_bytes(cls, raw: bytes):
+        return cls(raw.decode().replace('s:', '', 1))
 
-def arrayset_record_schema_raw_val_from_db_val(db_val: bytes) -> RawArraysetSchemaVal:
-    schema_spec = json.loads(db_val)
-    schema_spec['schema_max_shape'] = tuple(schema_spec['schema_max_shape'])
-    raw_val = RawArraysetSchemaVal(**schema_spec)
-    return raw_val
+    @classmethod
+    def from_schema(cls, schema: SchemaVal):
+        return cls(schema.schema_hash)
 
 
 """
@@ -502,248 +446,79 @@ Functions to convert metadata records to/from python objects
 """
 
 MetadataRecordKey = NamedTuple('MetadataRecordKey', [('meta_name', Union[str, int])])
-MetadataRecordKey.__doc__ = 'Represents a Metadata Sample Record Key'
-
-MetadataRecordVal = NamedTuple('MetadataRecordVal', [('meta_hash', str)])
-MetadataRecordVal.__doc__ = 'Represents a Metadata Sample Record Hash Value'
-
-# -------------------- db -> raw (python) -----------------------------
+DigestMetadataRecordVal = NamedTuple('DigestMetadataRecordVal', [('value', str)])
 
 
-def metadata_record_raw_key_from_db_key(db_key: bytes) -> MetadataRecordKey:
-    """Convert and split a lmdb record key & value into python objects
+class RefMetadataKey(MetadataRecordKey):
+    __slots__ = ()
 
-    Parameters
-    ----------
-    db_key : bytes
-        full lmdb record key
+    def __bytes__(self):
+        if isinstance(self.meta_name, int):
+            return f'l:#{self.meta_name}'.encode()
+        else:
+            return f'l:{self.meta_name}'.encode()
 
-    Returns
-    -------
-    MetadataRecordKey
-        the metadata name
-    """
-    meta_name = db_key.decode().replace(c.K_STGMETA, '', 1)
-    if meta_name.startswith(c.K_INT):
-        meta_name = int(meta_name.lstrip(c.K_INT))
-    return MetadataRecordKey(meta_name)
+    @classmethod
+    def from_bytes(cls, raw):
+        meta_name = raw.decode().replace('l:', '', 1)
+        if meta_name.startswith('#'):
+            meta_name = int(meta_name.lstrip('#'))
+        return cls(meta_name)
 
 
-def metadata_record_raw_val_from_db_val(db_val: bytes) -> MetadataRecordVal:
-    """Convert and split a lmdb record value into python objects
-
-    Parameters
-    ----------
-    db_val : bytes
-        full lmdb record value
-
-    Returns
-    -------
-    MetadataRecordVal
-        containing the metadata hash
-    """
-    meta_hash = db_val.decode()
-    return MetadataRecordVal(meta_hash)
+RefMetadataVal = RefDataVal
+HashMetadataKey = HashDataKey
 
 
-# -------------------- raw (python) -> db -----------------------------
+class HashMetadataVal(DigestMetadataRecordVal):
+    __slots__ = ()
 
+    def __bytes__(self) -> bytes:
+        return self.value.encode()
 
-def metadata_record_db_key_from_raw_key(meta_name: Union[str, int]) -> bytes:
-    """converts a python metadata name into the appropriate lmdb key
+    def __str__(self) -> str:
+        return self.value
 
-    Parameters
-    ----------
-    meta_name : Union[str, int]
-        key / name assigned to the metadata piece
-
-    Returns
-    -------
-    bytes
-        Byte encoded db record key
-    """
-    if isinstance(meta_name, int):
-        record_key = f'{c.K_STGMETA}{c.K_INT}{meta_name}'.encode()
-    else:
-        record_key = f'{c.K_STGMETA}{meta_name}'.encode()
-    return record_key
-
-
-def metadata_record_db_val_from_raw_val(meta_hash: str) -> bytes:
-    """convert a python metadata hash into the appropriate lmdb value
-
-    Parameters
-    ----------
-    meta_hash : string
-        uuid of the data sample
-
-    Returns
-    -------
-    bytes
-        Byte encoded db record val.
-    """
-    record_val = meta_hash.encode()
-    return record_val
+    @classmethod
+    def from_bytes(cls, raw: bytes):
+        return cls(raw.decode())
 
 
 """
-Hash Parsing Methods
---------------------
-
-The parsers defined in this section handle hash records for both data samples
-and metadata, though currently each is written to seperate lmdb databases.
-
-The hash db always exists in an unpacked structure, and contained records for
-every hash stored in the repository. At the moment, the hash records assumes
-the following:
-
-    * HDF5 backed
-    * All records available on the local disk
-    * A single hash type is used (at the moment, xxh64_hexdigest)
-
-These assumptions will change soon, and it is recomended to start here when
-begining development on any of the above features.
+Remote Work
+-----------
 """
 
-"""
-Data Hash parsing functions used to convert db key/val to raw pyhon obj
------------------------------------------------------------------------
-"""
-
-# -------------------- raw (python) -> db ----------------------------------------
+RawRemoteKey = NamedTuple('RawRemoteKey', [('name', str)])
+RawRemoteVal = NamedTuple('RawRemoteVal', [('address', str)])
 
 
-def hash_schema_db_key_from_raw_key(schema_hash: str) -> bytes:
-    key = f'{c.K_SCHEMA}{schema_hash}'
-    db_key = key.encode()
-    return db_key
+class RemoteKey(RawRemoteKey):
+    __slots__ = ()
+
+    def __bytes__(self) -> bytes:
+        return f'{c.K_REMOTES}{self.name}'.encode()
+
+    def __str__(self) -> str:
+        return self.name
+
+    @classmethod
+    def from_bytes(cls, raw: bytes):
+        return cls(raw.decode().replace(c.K_REMOTES, '', 1))
 
 
-def hash_data_db_key_from_raw_key(data_hash: str) -> bytes:
-    key = f'{c.K_HASH}{data_hash}'
-    db_key = key.encode()
-    return db_key
+class RemoteVal(RawRemoteVal):
+    __slots__ = ()
 
+    def __bytes__(self) -> bytes:
+        return self.address.encode()
 
-# ----------------------------- db -> raw (python) ----------------------------
+    def __str__(self) -> str:
+        return self.address
 
-
-def hash_schema_raw_key_from_db_key(db_key: bytes) -> str:
-    raw_key = db_key.decode()
-    data_hash = raw_key.replace(c.K_SCHEMA, '', 1)
-    return data_hash
-
-
-def hash_data_raw_key_from_db_key(db_key: bytes) -> str:
-    # may be uncesessary
-    raw_key = db_key.decode()
-    data_hash = raw_key.replace(c.K_HASH, '', 1)
-    return data_hash
-
-
-"""
-Metadata/Label Hash parsing functions used to convert db key/val to raw pyhon obj
----------------------------------------------------------------------------------
-"""
-
-# -------------------- raw (python) -> db ----------------------------------------
-
-
-def hash_meta_db_key_from_raw_key(meta_hash: str) -> bytes:
-    db_key = f'{c.K_HASH}{meta_hash}'.encode()
-    return db_key
-
-
-def hash_meta_db_val_from_raw_val(meta_val: str) -> bytes:
-    db_val = f'{meta_val}'.encode()
-    return db_val
-
-
-# ----------------------------- db -> raw (python) ----------------------------
-
-
-def hash_meta_raw_key_from_db_key(db_key: bytes) -> str:
-    data_hash = db_key.decode().replace(c.K_HASH, '', 1)
-    return data_hash
-
-
-def hash_meta_raw_val_from_db_val(db_val: bytes) -> str:
-    meta_val = db_val.decode()
-    return meta_val
-
-
-# -------------------- Remote Work --------------------------------------------
-
-
-def remote_db_key_from_raw_key(remote_name: str) -> bytes:
-    """Get the remote db key val for a remote name
-
-    Parameters
-    ----------
-    remote_name : str
-        name of the remote location
-
-    Returns
-    -------
-    bytes
-        db key allowing access to address value at the name of the remote
-    """
-    raw_key = f'{c.K_REMOTES}{remote_name}'
-    db_key = raw_key.encode()
-    return db_key
-
-
-def remote_raw_key_from_db_key(db_key: bytes) -> str:
-    """Get the remote name from a remote db key
-
-    Parameters
-    ----------
-    db_key : bytes
-        db key of the remote
-
-    Returns
-    -------
-    str
-        name of the remote
-    """
-    raw_key = db_key.decode()
-    remote_name = raw_key[len(c.K_REMOTES):]
-    return remote_name
-
-
-def remote_db_val_from_raw_val(grpc_address: str) -> bytes:
-    """Format a remote db value from it's grpc address string
-
-    Parameters
-    ----------
-    grpc_address : str
-        IP:PORT where the grpc server can be accessed
-
-    Returns
-    -------
-    bytes
-        formated representation of the grpc address suitable for storage in lmdb.
-    """
-    db_val = grpc_address.encode()
-    return db_val
-
-
-def remote_raw_val_from_db_val(db_val: bytes) -> str:
-    """Retrieve the address where a grpc server is running from a remote db value
-
-
-    Parameters
-    ----------
-    db_val : bytes
-        db value assigned to the desired remote name
-
-    Returns
-    -------
-    str
-        IP:PORT where the grpc server can be accessed.
-    """
-    raw_val = db_val.decode()
-    return raw_val
+    @classmethod
+    def from_bytes(cls, raw: bytes):
+        return cls(raw.decode())
 
 
 """

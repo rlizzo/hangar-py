@@ -223,13 +223,43 @@ _patern = fr'\{c.SEP_KEY}\{c.SEP_HSH}\{c.SEP_SLC}'
 _SplitDecoderRE: Pattern = re.compile(fr'[{_patern}]')
 
 
-HDF5_00_DataHashSpec = NamedTuple('HDF5_00_DataHashSpec', [
+HDF5_00_DataHashSpecBase = NamedTuple('HDF5_00_DataHashSpecBase', [
     ('backend', str),
     ('uid', str),
     ('checksum', str),
     ('dataset', str),
     ('dataset_idx', int),
     ('shape', Tuple[int])])
+
+
+class HDF5_00_DataHashSpec(HDF5_00_DataHashSpecBase):
+
+    __slots__ = ()
+
+    def __new__(cls, uid, checksum, dataset, dataset_idx, shape):
+        return super().__new__(cls, _FmtCode, uid, checksum, dataset, dataset_idx, shape)
+
+    def __bytes__(self):
+        out_str = f'{_FmtCode}{c.SEP_KEY}'\
+                  f'{self.uid}{c.SEP_HSH}{self.checksum}{c.SEP_HSH}'\
+                  f'{self.dataset}{c.SEP_LST}{self.dataset_idx}{c.SEP_SLC}'\
+                  f'{_ShapeFmtRE.sub("", str(self.shape))}'
+        return out_str.encode()
+
+    @classmethod
+    def from_bytes(cls, raw):
+        db_str = raw.decode()
+        _, uid, checksum, dataset_vs, shape_vs = _SplitDecoderRE.split(db_str)
+        dataset, dataset_idx = dataset_vs.split(' ')
+        # if the data is of empty shape -> shape_vs = '' str.split() default value
+        # of none means split according to any whitespace, and discard empty strings
+        # from the result. So long as c.SEP_LST = ' ' this will work
+        shape = tuple(map(int, shape_vs.split()))
+        return cls(uid=uid,
+                   checksum=checksum,
+                   dataset=dataset,
+                   dataset_idx=int(dataset_idx),
+                   shape=shape)
 
 
 def hdf5_00_encode(uid: str, checksum: str, dataset: str, dataset_idx: int,
@@ -790,9 +820,9 @@ class HDF5_00_FileHandles(object):
         flat_arr = np.ravel(array)
         self.wFp[self.w_uid][f'/{self.hNextPath}'].write_direct(flat_arr, srcSlc, destSlc)
 
-        hashVal = hdf5_00_encode(uid=self.w_uid,
-                                 checksum=checksum,
-                                 dataset=self.hNextPath,
-                                 dataset_idx=self.hIdx,
-                                 shape=array.shape)
+        hashVal = HDF5_00_DataHashSpec(uid=self.w_uid,
+                                       checksum=checksum,
+                                       dataset=str(self.hNextPath),
+                                       dataset_idx=self.hIdx,
+                                       shape=array.shape)
         return hashVal
