@@ -69,38 +69,55 @@ _FmtCode = '50'
 _patern = fr'\{c.SEP_KEY}\{c.SEP_HSH}\{c.SEP_SLC}'
 _SplitDecoderRE = re.compile(fr'[{_patern}]')
 
-REMOTE_50_DataHashSpec = NamedTuple('REMOTE_50_DataHashSpec',
-                                    [('backend', str), ('schema_hash', str)])
+REMOTE_50_DataHashSpecBase = NamedTuple('REMOTE_50_DataHashSpecBase',
+                                        [('backend', str), ('schema_hash', str)])
 
 
-def remote_50_encode(schema_hash: str = '') -> bytes:
-    """returns an db value saying that this hash exists somewhere on a remote
+class REMOTE_50_DataHashSpec(REMOTE_50_DataHashSpecBase):
 
-    Returns
-    -------
-    bytes
-        hash data db value
-    """
-    return f'{_FmtCode}{c.SEP_KEY}{schema_hash}'.encode()
+    __slots__ = ()
+
+    def __new__(cls, schema_hash):
+        return super().__new__(cls, _FmtCode, schema_hash)
+
+    def __bytes__(self):
+        return f'{_FmtCode}{c.SEP_KEY}{self.schema_hash}'.encode()
+
+    @classmethod
+    def from_bytes(cls, raw):
+        db_str = raw.decode()
+        _, schema_hash = _SplitDecoderRE.split(db_str)
+        return cls(schema_hash)
 
 
-def remote_50_decode(db_val: bytes) -> REMOTE_50_DataHashSpec:
-    """converts a numpy data hash db val into a numpy data python spec
+# def remote_50_encode(schema_hash: str = '') -> bytes:
+#     """returns an db value saying that this hash exists somewhere on a remote
 
-    Parameters
-    ----------
-    db_val : bytes
-        data hash db val
+#     Returns
+#     -------
+#     bytes
+#         hash data db value
+#     """
+#     return f'{_FmtCode}{c.SEP_KEY}{schema_hash}'.encode()
 
-    Returns
-    -------
-    REMOTE_50_DataHashSpec
-        hash specification containing an identifies: `backend`, `schema_hash`
-    """
-    db_str = db_val.decode()
-    _, schema_hash = _SplitDecoderRE.split(db_str)
-    raw_val = REMOTE_50_DataHashSpec(backend=_FmtCode, schema_hash=schema_hash)
-    return raw_val
+
+# def remote_50_decode(db_val: bytes) -> REMOTE_50_DataHashSpec:
+#     """converts a numpy data hash db val into a numpy data python spec
+
+#     Parameters
+#     ----------
+#     db_val : bytes
+#         data hash db val
+
+#     Returns
+#     -------
+#     REMOTE_50_DataHashSpec
+#         hash specification containing an identifies: `backend`, `schema_hash`
+#     """
+#     db_str = db_val.decode()
+#     _, schema_hash = _SplitDecoderRE.split(db_str)
+#     raw_val = REMOTE_50_DataHashSpec(backend=_FmtCode, schema_hash=schema_hash)
+#     return raw_val
 
 
 # ------------------------- Accessor Object -----------------------------------
@@ -164,4 +181,4 @@ class REMOTE_50_Handler(object):
         bytes
             formated raw values encoding lookup information
         """
-        return remote_50_encode(schema_hash=schema_hash)
+        return REMOTE_50_DataHashSpec(schema_hash=schema_hash)

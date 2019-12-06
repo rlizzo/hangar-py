@@ -15,15 +15,9 @@ from .utils import cm_weakref_obj_proxy, is_suitable_user_key, is_ascii
 from .records.hashmachine import schema_hash_digest
 from .records.hashmachine import array_hash_digest
 from .records.queries import RecordQuery
-from .records.parsing import hash_data_db_key_from_raw_key
-from .records.parsing import generate_sample_name
-from .records.parsing import hash_schema_db_key_from_raw_key
-from .records.parsing import data_record_db_key_from_raw_key
-from .records.parsing import data_record_raw_val_from_db_val
-from .records.parsing import data_record_db_val_from_raw_val
-from .records.parsing import arrayset_record_count_range_key
-from .records.parsing import arrayset_record_schema_db_key_from_raw_key
-from .records.parsing import arrayset_record_schema_db_val_from_raw_val
+from .records.parsing import (
+    generate_sample_name, RefDataKey, RefDataVal, HashDataKey,
+    RefSchemaKey, SchemaVal, HashSchemaKey, arrayset_record_count_range_key)
 
 
 CompatibleArray = NamedTuple(
@@ -112,8 +106,9 @@ class ArraysetDataReader(object):
             used_bes = set()
             asetNamesSpec = RecordQuery(dataenv).arrayset_data_records(self._asetn)
             for asetNames, dataSpec in asetNamesSpec:
-                hashKey = hash_data_db_key_from_raw_key(dataSpec.data_hash)
-                hash_ref = hashTxn.get(hashKey)
+                hashKey = HashDataKey(dataSpec.digest)
+                # hashKey = hash_data_db_key_from_raw_key(dataSpec.data_hash)
+                hash_ref = hashTxn.get(bytes(hashKey))
                 be_loc = backend_decoder(hash_ref)
                 self._sspecs[asetNames.data_name] = be_loc
                 used_bes.add(be_loc.backend)
@@ -667,8 +662,8 @@ class ArraysetDataWriter(ArraysetDataReader):
                                          variable_shape=self.variable_shape,
                                          backend_code=beopts.backend,
                                          backend_opts=beopts.opts)
-        asetSchemaKey = arrayset_record_schema_db_key_from_raw_key(self.name)
-        asetSchemaVal = arrayset_record_schema_db_val_from_raw_val(
+        asetSchemaKey = RefSchemaKey(self.name)
+        asetSchemaVal = SchemaVal(
             schema_hash=schema_hash,
             schema_is_var=self.variable_shape,
             schema_max_shape=proto.shape,
@@ -676,13 +671,13 @@ class ArraysetDataWriter(ArraysetDataReader):
             schema_is_named=self.named_samples,
             schema_default_backend=beopts.backend,
             schema_default_backend_opts=beopts.opts)
+        hashSchemaKey = HashSchemaKey(schema_hash)
 
-        hashSchemaKey = hash_schema_db_key_from_raw_key(schema_hash)
         dataTxn = TxnRegister().begin_writer_txn(self._dataenv)
         hashTxn = TxnRegister().begin_writer_txn(self._hashenv)
         try:
-            dataTxn.put(asetSchemaKey, asetSchemaVal)
-            hashTxn.put(hashSchemaKey, asetSchemaVal, overwrite=False)
+            dataTxn.put(bytes(asetSchemaKey), bytes(asetSchemaVal))
+            hashTxn.put(bytes(hashSchemaKey), bytes(asetSchemaVal), overwrite=False)
         finally:
             TxnRegister().commit_writer_txn(self._dataenv)
             TxnRegister().commit_writer_txn(self._hashenv)
@@ -767,29 +762,29 @@ class ArraysetDataWriter(ArraysetDataReader):
                 self.__enter__()
 
             full_hash = array_hash_digest(data)
-            hashKey = hash_data_db_key_from_raw_key(full_hash)
+            hashKey = HashDataKey(full_hash)
+            dataRecKey = RefDataKey(self._asetn, name)
             # check if data record already exists with given key
-            dataRecKey = data_record_db_key_from_raw_key(self._asetn, name)
-            existingDataRecVal = self._dataTxn.get(dataRecKey, default=False)
+            existingDataRecVal = self._dataTxn.get(bytes(dataRecKey), default=False)
             if existingDataRecVal:
                 # check if data record already with same key & hash value
-                existingDataRec = data_record_raw_val_from_db_val(existingDataRecVal)
+                existingDataRec = RefDataVal.from_bytes(existingDataRecVal)
                 if full_hash == existingDataRec.data_hash:
                     return name
 
             # write new data if data hash does not exist
-            existingHashVal = self._hashTxn.get(hashKey, default=False)
+            existingHashVal = self._hashTxn.get(bytes(hashKey), default=False)
             if existingHashVal is False:
                 hashVal = self._fs[self._dflt_backend].write_data(data)
-                self._hashTxn.put(hashKey, hashVal)
-                self._stageHashTxn.put(hashKey, hashVal)
-                self._sspecs[name] = backend_decoder(hashVal)
+                self._hashTxn.put(bytes(hashKey), bytes(hashVal))
+                self._stageHashTxn.put(bytes(hashKey), bytes(hashVal))
+                self._sspecs[name] = hashVal
             else:
                 self._sspecs[name] = backend_decoder(existingHashVal)
 
             # add the record to the db
-            dataRecVal = data_record_db_val_from_raw_val(full_hash)
-            self._dataTxn.put(dataRecKey, dataRecVal)
+            dataRecVal = RefDataVal(full_hash)
+            self._dataTxn.put(bytes(dataRecKey), bytes(dataRecVal))
 
         finally:
             if tmpconman:
@@ -837,9 +832,9 @@ class ArraysetDataWriter(ArraysetDataReader):
         if tmpconman:
             self._dataTxn = self._TxnRegister.begin_writer_txn(self._dataenv)
 
-        dataKey = data_record_db_key_from_raw_key(self._asetn, name)
+        dataKey = RefDataKey(self._asetn, name)
         try:
-            isRecordDeleted = self._dataTxn.delete(dataKey)
+            isRecordDeleted = self._dataTxn.delete(bytes(dataKey))
             if isRecordDeleted is False:
                 raise KeyError(f'No sample {name} in {self._asetn}')
             del self._sspecs[name]
@@ -1354,8 +1349,8 @@ class Arraysets(object):
                                          backend_code=beopts.backend,
                                          backend_opts=beopts.opts)
 
-        asetSchemaKey = arrayset_record_schema_db_key_from_raw_key(name)
-        asetSchemaVal = arrayset_record_schema_db_val_from_raw_val(
+        asetSchemaKey = RefSchemaKey(name)
+        asetSchemaVal = SchemaVal(
             schema_hash=schema_hash,
             schema_is_var=variable_shape,
             schema_max_shape=prototype.shape,
@@ -1363,15 +1358,14 @@ class Arraysets(object):
             schema_is_named=named_samples,
             schema_default_backend=beopts.backend,
             schema_default_backend_opts=beopts.opts)
+        hashSchemaKey = HashSchemaKey(schema_hash)
 
         # -------- set vals in lmdb only after schema is sure to exist --------
 
         dataTxn = TxnRegister().begin_writer_txn(self._dataenv)
         hashTxn = TxnRegister().begin_writer_txn(self._hashenv)
-        hashSchemaKey = hash_schema_db_key_from_raw_key(schema_hash)
-        hashSchemaVal = asetSchemaVal
-        dataTxn.put(asetSchemaKey, asetSchemaVal)
-        hashTxn.put(hashSchemaKey, hashSchemaVal, overwrite=False)
+        dataTxn.put(bytes(asetSchemaKey), bytes(asetSchemaVal))
+        hashTxn.put(bytes(hashSchemaKey), bytes(asetSchemaVal), overwrite=False)
         TxnRegister().commit_writer_txn(self._dataenv)
         TxnRegister().commit_writer_txn(self._hashenv)
 
@@ -1436,8 +1430,8 @@ class Arraysets(object):
                     else:
                         recordsExist = False
 
-            asetSchemaKey = arrayset_record_schema_db_key_from_raw_key(aset_name)
-            datatxn.delete(asetSchemaKey)
+            asetSchemaKey = RefSchemaKey(aset_name)
+            datatxn.delete(bytes(asetSchemaKey))
         finally:
             TxnRegister().commit_writer_txn(self._dataenv)
 

@@ -87,10 +87,10 @@ from typing import Dict, Union, Callable, Mapping, NamedTuple, Optional
 
 import numpy as np
 
-from .hdf5_00 import HDF5_00_FileHandles, hdf5_00_decode, HDF5_00_DataHashSpec
-from .hdf5_01 import HDF5_01_FileHandles, hdf5_01_decode, HDF5_01_DataHashSpec
-from .numpy_10 import NUMPY_10_FileHandles, numpy_10_decode, NUMPY_10_DataHashSpec
-from .remote_50 import REMOTE_50_Handler, remote_50_decode, REMOTE_50_DataHashSpec
+from .hdf5_00 import HDF5_00_FileHandles, HDF5_00_DataHashSpec
+from .hdf5_01 import HDF5_01_FileHandles, HDF5_01_DataHashSpec
+from .numpy_10 import NUMPY_10_FileHandles, NUMPY_10_DataHashSpec
+from .remote_50 import REMOTE_50_Handler, REMOTE_50_DataHashSpec
 
 
 # -------------------------- Parser Types and Mapping -------------------------
@@ -102,16 +102,16 @@ _DataHashSpecs = Union[
     NUMPY_10_DataHashSpec,
     REMOTE_50_DataHashSpec]
 
-_ParserMap = Mapping[bytes, Callable[[bytes], _DataHashSpecs]]
+# _ParserMap = Mapping[bytes, Callable[[bytes], _DataHashSpecs]]
 
-BACKEND_DECODER_MAP: _ParserMap = {
+BACKEND_DECODER_MAP = {
     # LOCALS -> [00:50]
-    b'00': hdf5_00_decode,
-    b'01': hdf5_01_decode,
-    b'10': numpy_10_decode,
+    b'00': HDF5_00_DataHashSpec,
+    b'01': HDF5_01_DataHashSpec,
+    b'10': NUMPY_10_DataHashSpec,
     b'20': None,               # tiledb_20 - Reserved
     # REMOTES -> [50:100]
-    b'50': remote_50_decode,
+    b'50': REMOTE_50_DataHashSpec,
     b'60': None,               # url_60 - Reserved
 }
 
@@ -154,7 +154,7 @@ def backend_decoder(db_val: bytes) -> _DataHashSpecs:
         field name `backend`.
     """
     parser = BACKEND_DECODER_MAP[db_val[:2]]
-    decoded = parser(db_val)
+    decoded = parser.from_bytes(db_val)
     return decoded
 
 

@@ -5,6 +5,7 @@ from typing import NamedTuple
 import lmdb
 
 from . import parsing
+from .parsing import RemoteKey, RemoteVal
 from ..context import TxnRegister
 
 
@@ -547,12 +548,12 @@ def add_remote(branchenv: lmdb.Environment, name: str, address: str) -> bool:
     bool
         True if the new reference was saved, False if not.
     """
-    dbKey = parsing.remote_db_key_from_raw_key(name)
-    dbVal = parsing.remote_db_val_from_raw_val(address)
+    key = RemoteKey(name)
+    val = RemoteVal(address)
 
     branchTxn = TxnRegister().begin_writer_txn(branchenv)
     try:
-        succ = branchTxn.put(dbKey, dbVal, overwrite=False)
+        succ = branchTxn.put(bytes(key), bytes(val), overwrite=False)
     finally:
         TxnRegister().commit_writer_txn(branchenv)
 
@@ -579,10 +580,10 @@ def get_remote_address(branchenv: lmdb.Environment, name: str) -> str:
     str
         IP:PORT of the recorded remote server.
     """
-    dbKey = parsing.remote_db_key_from_raw_key(name)
+    key = RemoteKey(name)
     branchTxn = TxnRegister().begin_reader_txn(branchenv)
     try:
-        dbVal = branchTxn.get(dbKey, default=False)
+        dbVal = branchTxn.get(bytes(key), default=False)
     finally:
         TxnRegister().abort_reader_txn(branchenv)
 
@@ -590,8 +591,8 @@ def get_remote_address(branchenv: lmdb.Environment, name: str) -> str:
         msg = f'No remote with the name: {name} exists in the repo.'
         raise KeyError(msg)
     else:
-        remote_address = parsing.remote_raw_val_from_db_val(dbVal)
-        return remote_address
+        remote_address = RemoteVal.from_bytes(dbVal)
+        return str(remote_address)
 
 
 def remove_remote(branchenv: lmdb.Environment, name: str) -> str:
@@ -614,10 +615,10 @@ def remove_remote(branchenv: lmdb.Environment, name: str) -> str:
     str
         IP:PORT of the remote with provided name (which was removed)
     """
-    dbKey = parsing.remote_db_key_from_raw_key(name)
+    key = RemoteKey(name)
     branchTxn = TxnRegister().begin_writer_txn(branchenv)
     try:
-        dbVal = branchTxn.pop(dbKey)
+        dbVal = branchTxn.pop(bytes(key))
     finally:
         TxnRegister().commit_writer_txn(branchenv)
 
@@ -625,8 +626,8 @@ def remove_remote(branchenv: lmdb.Environment, name: str) -> str:
         msg = f'No remote with the name: {name} exists in the repo.'
         raise ValueError(msg)
 
-    remote_address = parsing.remote_raw_val_from_db_val(dbVal)
-    return remote_address
+    remote_address = RemoteVal.from_bytes(dbVal)
+    return str(remote_address)
 
 
 def get_remote_names(branchenv):
@@ -652,8 +653,8 @@ def get_remote_names(branchenv):
             while remoteRangeExists:
                 remoteKey = cursor.key()
                 if remoteKey.startswith(remoteStartKey):
-                    name = parsing.remote_raw_key_from_db_key(remoteKey)
-                    remoteNames.append(name)
+                    name = RemoteKey.from_bytes(remoteKey)
+                    remoteNames.append(str(name))
                     remoteRangeExists = cursor.next()
                 else:
                     remoteRangeExists = False

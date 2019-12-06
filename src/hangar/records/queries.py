@@ -4,13 +4,13 @@ import lmdb
 
 from .. import constants as c
 from . import parsing
-from .parsing import RawDataRecordKey, RawDataRecordVal
-from .parsing import MetadataRecordKey, MetadataRecordVal
-from .parsing import RawArraysetSchemaVal
+from .parsing import RefDataKey, RefDataVal
+from .parsing import RefMetadataKey, RefMetadataVal
+from .parsing import RefSchemaKey, SchemaVal
 from ..context import TxnRegister
 
-RawDataTuple = Tuple[RawDataRecordKey, RawDataRecordVal]
-RawMetaTuple = Tuple[MetadataRecordKey, MetadataRecordVal]
+# RawDataTuple = Tuple[RawDataRecordKey, RawDataRecordVal]
+# RawMetaTuple = Tuple[MetadataRecordKey, MetadataRecordVal]
 
 """
 Data record queries
@@ -146,8 +146,11 @@ class RecordQuery(object):
             list of all arrayset names
         """
         recs = self._traverse_arrayset_schema_records()
-        arrayset_names = map(parsing.arrayset_record_schema_raw_key_from_db_key, recs.keys())
-        return list(arrayset_names)
+        schemas = map(RefSchemaKey.from_bytes, recs.keys())
+        names = map(str, schemas)
+        return list(names)
+        # arrayset_names = map(parsing.arrayset_record_schema_raw_key_from_db_key, recs.keys())
+        # return list(arrayset_names)
 
     def arrayset_count(self) -> int:
         """Return number of arraysets/schemas in the commit
@@ -160,7 +163,7 @@ class RecordQuery(object):
         nrecs = len(self._traverse_arrayset_schema_records())
         return nrecs
 
-    def data_hashes(self) -> Set[RawDataRecordVal]:
+    def data_hashes(self) -> Set[str]:
         """Find all data hashes contained within all arraysets
 
         Note: this method does not remove any duplicates which may be present,
@@ -168,20 +171,22 @@ class RecordQuery(object):
 
         Returns
         -------
-        list
+        Set[str]
             all hash values for all data pieces in the commit
         """
         arraysets = self.arrayset_names()
         all_hashes = set()
         for arrayset in arraysets:
             recs = self._traverse_arrayset_data_records(arrayset)
-            data_val_rec = set(map(parsing.data_record_raw_val_from_db_val, recs.values()))
-            all_hashes.update(data_val_rec)
+            aset_digests = set(map(str, map(RefDataVal.from_bytes, recs.values())))
+            # data_val_rec = set(map(parsing.data_record_raw_val_from_db_val, recs.values()))
+            # all_hashes.update(data_val_rec)
+            all_hashes.update(aset_digests)
         return all_hashes
 
 # ------------------------ process arrayset data records ----------------------
 
-    def arrayset_data_records(self, arrayset_name: str) -> Iterable[RawDataTuple]:
+    def arrayset_data_records(self, arrayset_name: str) -> Iterable[Tuple[RefDataKey, RefDataVal]]:
         """Returns the raw data record key and record values for a specific arrayset.
 
         Parameters
@@ -196,8 +201,8 @@ class RecordQuery(object):
         """
         recs = self._traverse_arrayset_data_records(arrayset_name)
         if len(recs) > 0:
-            data_rec_keys = map(parsing.data_record_raw_key_from_db_key, recs.keys())
-            data_rec_vals = map(parsing.data_record_raw_val_from_db_val, recs.values())
+            data_rec_keys = map(RefDataKey.from_bytes, recs.keys())
+            data_rec_vals = map(RefDataVal.from_bytes, recs.values())
             recs = zip(data_rec_keys, data_rec_vals)
         return recs
 
@@ -219,11 +224,11 @@ class RecordQuery(object):
             list of data names contained in the arrayset
         """
         recs = self._traverse_arrayset_data_records(arrayset_name)
-        data_key_rec = map(parsing.data_record_raw_key_from_db_key, recs.keys())
+        data_key_rec = map(RefDataKey.from_bytes, recs.keys())
         data_names = list(map(lambda x: x.data_name, data_key_rec))
         return data_names
 
-    def arrayset_data_hashes(self, arrayset_name: str) -> Set[RawDataRecordVal]:
+    def arrayset_data_hashes(self, arrayset_name: str):
         """Find all data hashes contained within a particular arrayset
 
         Note: this method does not remove any duplicates which may be present,
@@ -240,7 +245,7 @@ class RecordQuery(object):
             all hash values for all data pieces in the arrayset
         """
         recs = self._traverse_arrayset_data_records(arrayset_name)
-        data_val_rec = map(parsing.data_record_raw_val_from_db_val, recs.values())
+        data_val_rec = map(RefDataVal.from_bytes, recs.values())
         all_hashes = set(data_val_rec)
         return all_hashes
 
@@ -262,7 +267,7 @@ class RecordQuery(object):
 
 # ------------------------- process schema ----------------------------------------------
 
-    def arrayset_schema_spec(self, arrayset_name) -> RawArraysetSchemaVal:
+    def arrayset_schema_spec(self, arrayset_name):
         """Return the schema spec for a specific arrayset name.
 
         If you need both names, and schema spec values, use the `schema_specs` method. The
@@ -280,12 +285,13 @@ class RecordQuery(object):
             raw schema spec for the arrayset requested
         """
         recs = self._traverse_arrayset_schema_records()
-        asetSchemaKey = parsing.arrayset_record_schema_db_key_from_raw_key(arrayset_name)
+        asetSchemaKey = bytes(RefSchemaKey(arrayset_name))
         schemaRecVal = recs[asetSchemaKey]
-        schemaRec = parsing.arrayset_record_schema_raw_val_from_db_val(schemaRecVal)
+        schemaRec = SchemaVal.from_bytes(schemaRecVal)
+        # schemaRec = parsing.arrayset_record_schema_raw_val_from_db_val(schemaRecVal)
         return schemaRec
 
-    def schema_specs(self) -> Dict[str, RawArraysetSchemaVal]:
+    def schema_specs(self):
         """Return the all schema specs defined by all arraysets.
 
         Returns
@@ -295,8 +301,8 @@ class RecordQuery(object):
         """
         recs = self._traverse_arrayset_schema_records()
         if len(recs) > 0:
-            schKeys = map(parsing.arrayset_record_schema_raw_key_from_db_key, recs.keys())
-            schVals = map(parsing.arrayset_record_schema_raw_val_from_db_val, recs.values())
+            schKeys = map(str, map(RefSchemaKey.from_bytes, recs.keys()))
+            schVals = map(SchemaVal.from_bytes, recs.values())
             recs = dict(zip(schKeys, schVals))
         return recs
 
@@ -311,7 +317,7 @@ class RecordQuery(object):
         recs = self._traverse_arrayset_schema_records()
         all_schema_hashes = []
         if len(recs) > 0:
-            schema_rec_vals = map(parsing.arrayset_record_schema_raw_val_from_db_val, recs.values())
+            schema_rec_vals = map(SchemaVal.from_bytes, recs.values())
             schema_hashs = map(lambda x: x.schema_hash, schema_rec_vals)
             all_schema_hashes.extend(schema_hashs)
         return all_schema_hashes
@@ -331,7 +337,7 @@ class RecordQuery(object):
             aset_schema_spec = self.arrayset_schema_spec(asetn)
             aset_schema_hash = aset_schema_spec.schema_hash
             for aset_hash_val in aset_hash_vals:
-                odict[aset_hash_val.data_hash] = aset_schema_hash
+                odict[aset_hash_val.digest] = aset_schema_hash
 
         return odict
 
@@ -351,13 +357,13 @@ class RecordQuery(object):
         """
         recs = self._traverse_metadata_records()
         if len(recs) > 0:
-            meta_key_rec = map(parsing.metadata_record_raw_key_from_db_key, recs.keys())
+            meta_key_rec = map(RefMetadataKey.from_bytes, recs.keys())
             meta_names = list(map(lambda x: x.meta_name, meta_key_rec))
         else:
             meta_names = []
         return meta_names
 
-    def metadata_records(self) -> Iterable[RawMetaTuple]:
+    def metadata_records(self):
         """returns all the metadata record specs for all metadata keys
 
         Returns
@@ -367,8 +373,8 @@ class RecordQuery(object):
         """
         recs = self._traverse_metadata_records()
         if len(recs) > 0:
-            meta_rec_keys = map(parsing.metadata_record_raw_key_from_db_key, recs.keys())
-            meta_rec_vals = map(parsing.metadata_record_raw_val_from_db_val, recs.values())
+            meta_rec_keys = map(RefMetadataKey.from_bytes, recs.keys())
+            meta_rec_vals = map(RefMetadataVal.from_bytes, recs.values())
             recs = zip(meta_rec_keys, meta_rec_vals)
         return recs
 
@@ -386,7 +392,7 @@ class RecordQuery(object):
         recs = self._traverse_metadata_records()
         all_hashes = []
         if len(recs) > 0:
-            meta_rec_vals = map(parsing.metadata_record_raw_val_from_db_val, recs.values())
+            meta_rec_vals = map(RefMetadataVal.from_bytes, recs.values())
             meta_hashs = map(lambda x: x.meta_hash, meta_rec_vals)
             all_hashes.extend(meta_hashs)
         return all_hashes

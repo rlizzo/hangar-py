@@ -12,14 +12,14 @@ from .context import TxnRegister
 from .records import commiting
 from .records import heads
 from .records.commiting import tmp_cmt_env
-from .records.parsing import MetadataRecordKey
-from .records.parsing import RawDataRecordKey
-from .records.parsing import arrayset_record_schema_raw_key_from_db_key
-from .records.parsing import arrayset_record_schema_raw_val_from_db_val
-from .records.parsing import data_record_raw_key_from_db_key
-from .records.parsing import data_record_raw_val_from_db_val
-from .records.parsing import metadata_record_raw_key_from_db_key
-from .records.parsing import metadata_record_raw_val_from_db_val
+from .records.parsing import RefDataKey, RefDataVal, RefMetadataKey, RefMetadataVal, RefSchemaKey, SchemaVal
+# from .records.parsing import RawDataRecordKey
+# from .records.parsing import arrayset_record_schema_raw_key_from_db_key
+# from .records.parsing import arrayset_record_schema_raw_val_from_db_val
+# from .records.parsing import data_record_raw_key_from_db_key
+# from .records.parsing import data_record_raw_val_from_db_val
+# from .records.parsing import metadata_record_raw_key_from_db_key
+# from .records.parsing import metadata_record_raw_val_from_db_val
 from .records.queries import RecordQuery
 
 # ------------------------- Differ Types --------------------------------------
@@ -48,7 +48,8 @@ DiffOut = NamedTuple('DiffOut', [
     ('mutated', Changes),
 ])
 
-ConflictKeys = Union[str, RawDataRecordKey, MetadataRecordKey]
+
+ConflictKeys = Union[str, RefDataKey, RefMetadataKey]
 
 Conflicts = NamedTuple('Conflicts', [
     ('t1', Iterable[ConflictKeys]),
@@ -166,18 +167,18 @@ def _raw_from_db_change(changes: Set[Tuple[bytes, bytes]]) -> Changes:
     arraysets, metadata, schema = {}, {}, {}
     for k, v in changes:
         if k.startswith(b'a:'):
-            rk = data_record_raw_key_from_db_key(k)
-            rv = data_record_raw_val_from_db_val(v)
+            rk = RefDataKey.from_bytes(k)
+            rv = RefDataVal.from_bytes(v)
             arraysets[rk] = rv
             continue
         elif k.startswith(b'l:'):
-            rk = metadata_record_raw_key_from_db_key(k)
-            rv = metadata_record_raw_val_from_db_val(v)
+            rk = RefMetadataKey.from_bytes(k)
+            rv = RefMetadataVal.from_bytes(v)
             metadata[rk] = rv
             continue
         elif k.startswith(b's:'):
-            rk = arrayset_record_schema_raw_key_from_db_key(k)
-            rv = arrayset_record_schema_raw_val_from_db_val(v)
+            rk = RefSchemaKey.from_bytes(k)
+            rv = SchemaVal.from_bytes(v)
             schema[rk] = rv
             continue
     return Changes(schema=schema, samples=arraysets, metadata=metadata)

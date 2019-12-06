@@ -5,7 +5,7 @@ from typing import Union, Optional, List
 
 from . import merger
 from . import constants as c
-from .remotes import Remotes
+# from .remotes import Remotes
 from .context import Environments
 from .diagnostics import graphing, ecosystem
 from .records import heads, parsing, summarize, vcompat
@@ -66,7 +66,8 @@ class Repository(object):
 
         self._repo_path: os.PathLike = repo_pth
         self._env: Environments = envs
-        self._remote: Remotes = Remotes(self._env)
+        # self._remote: Remotes = Remotes(self._env)
+        self._remote = None
 
     def _repr_pretty_(self, p, cycle):
         """provide a pretty-printed repr for ipython based user interaction.
@@ -119,8 +120,10 @@ class Repository(object):
                   f'Please run the `init_repo()` function'
             raise RuntimeError(msg)
 
+    # @property
+    # def remote(self) -> Remotes:
     @property
-    def remote(self) -> Remotes:
+    def remote(self):
         """Accessor to the methods controlling remote interactions.
 
         .. seealso::

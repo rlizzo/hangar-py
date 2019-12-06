@@ -115,66 +115,94 @@ _patern = fr'\{c.SEP_KEY}\{c.SEP_HSH}\{c.SEP_SLC}'
 _SplitDecoderRE = re.compile(fr'[{_patern}]')
 
 
-NUMPY_10_DataHashSpec = NamedTuple('NUMPY_10_DataHashSpec',
-                                   [('backend', str), ('uid', str),
-                                    ('checksum', str), ('collection_idx', int),
-                                    ('shape', Tuple[int])])
+NUMPY_10_DataHashSpecBase = NamedTuple('NUMPY_10_DataHashSpecBase',
+                                       [('backend', str), ('uid', str),
+                                        ('checksum', str), ('collection_idx', int),
+                                        ('shape', Tuple[int])])
 
 
-def numpy_10_encode(uid: str, checksum: str, collection_idx: int, shape: tuple) -> bytes:
-    """converts the numpy data spect to an appropriate db value
+class NUMPY_10_DataHashSpec(NUMPY_10_DataHashSpecBase):
 
-    Parameters
-    ----------
-    uid : str
-        file name (schema uid) of the np file to find this data piece in.
-    checksum : int
-        xxhash64_hexdigest checksum of the data as computed on that local machine.
-    collection_idx : int
-        collection first axis index in which this data piece resides.
-    shape : tuple
-        shape of the data sample written to the collection idx. ie: what
-        subslices of the array should be read to retrieve the sample as
-        recorded.
+    __slots__ = ()
 
-    Returns
-    -------
-    bytes
-        hash data db value recording all input specifications
-    """
-    out_str = f'{_FmtCode}{c.SEP_KEY}'\
-              f'{uid}{c.SEP_HSH}{checksum}{c.SEP_HSH}'\
-              f'{collection_idx}{c.SEP_SLC}'\
-              f'{_ShapeFmtRE.sub("", str(shape))}'
-    return out_str.encode()
+    def __new__(cls, uid, checksum, collection_idx, shape):
+        return super().__new__(cls, _FmtCode, uid, checksum, collection_idx, shape)
+
+    def __bytes__(self):
+        out_str = f'{_FmtCode}{c.SEP_KEY}'\
+                  f'{self.uid}{c.SEP_HSH}{self.checksum}{c.SEP_HSH}'\
+                  f'{self.collection_idx}{c.SEP_SLC}'\
+                  f'{_ShapeFmtRE.sub("", str(self.shape))}'
+        return out_str.encode()
+
+    @classmethod
+    def from_bytes(cls, raw):
+        db_str = raw.decode()
+        _, uid, checksum, collection_idx, shape_vs = _SplitDecoderRE.split(db_str)
+        # if the data is of empty shape -> shape_vs = '' str.split() default value
+        # of none means split according to any whitespace, and discard empty strings
+        # from the result. So long as c.SEP_LST = ' ' this will work
+        shape = tuple(map(int, shape_vs.split()))
+        return cls(uid=uid,
+                   checksum=checksum,
+                   collection_idx=int(collection_idx),
+                   shape=shape)
 
 
-def numpy_10_decode(db_val: bytes) -> NUMPY_10_DataHashSpec:
-    """converts a numpy data hash db val into a numpy data python spec
+# def numpy_10_encode(uid: str, checksum: str, collection_idx: int, shape: tuple) -> bytes:
+#     """converts the numpy data spect to an appropriate db value
 
-    Parameters
-    ----------
-    db_val : bytes
-        data hash db val
+#     Parameters
+#     ----------
+#     uid : str
+#         file name (schema uid) of the np file to find this data piece in.
+#     checksum : int
+#         xxhash64_hexdigest checksum of the data as computed on that local machine.
+#     collection_idx : int
+#         collection first axis index in which this data piece resides.
+#     shape : tuple
+#         shape of the data sample written to the collection idx. ie: what
+#         subslices of the array should be read to retrieve the sample as
+#         recorded.
 
-    Returns
-    -------
-    DataHashSpec
-        numpy data hash specification containing `backend`, `schema`, and
-        `uid`, `collection_idx` and `shape` fields.
-    """
-    db_str = db_val.decode()
-    _, uid, checksum, collection_idx, shape_vs = _SplitDecoderRE.split(db_str)
-    # if the data is of empty shape -> shape_vs = '' str.split() default value
-    # of none means split according to any whitespace, and discard empty strings
-    # from the result. So long as c.SEP_LST = ' ' this will work
-    shape = tuple(map(int, shape_vs.split()))
-    raw_val = NUMPY_10_DataHashSpec(backend=_FmtCode,
-                                    uid=uid,
-                                    checksum=checksum,
-                                    collection_idx=int(collection_idx),
-                                    shape=shape)
-    return raw_val
+#     Returns
+#     -------
+#     bytes
+#         hash data db value recording all input specifications
+#     """
+#     out_str = f'{_FmtCode}{c.SEP_KEY}'\
+#               f'{uid}{c.SEP_HSH}{checksum}{c.SEP_HSH}'\
+#               f'{collection_idx}{c.SEP_SLC}'\
+#               f'{_ShapeFmtRE.sub("", str(shape))}'
+#     return out_str.encode()
+
+
+# def numpy_10_decode(db_val: bytes) -> NUMPY_10_DataHashSpec:
+#     """converts a numpy data hash db val into a numpy data python spec
+
+#     Parameters
+#     ----------
+#     db_val : bytes
+#         data hash db val
+
+#     Returns
+#     -------
+#     DataHashSpec
+#         numpy data hash specification containing `backend`, `schema`, and
+#         `uid`, `collection_idx` and `shape` fields.
+#     """
+#     db_str = db_val.decode()
+#     _, uid, checksum, collection_idx, shape_vs = _SplitDecoderRE.split(db_str)
+#     # if the data is of empty shape -> shape_vs = '' str.split() default value
+#     # of none means split according to any whitespace, and discard empty strings
+#     # from the result. So long as c.SEP_LST = ' ' this will work
+#     shape = tuple(map(int, shape_vs.split()))
+#     raw_val = NUMPY_10_DataHashSpec(backend=_FmtCode,
+#                                     uid=uid,
+#                                     checksum=checksum,
+#                                     collection_idx=int(collection_idx),
+#                                     shape=shape)
+#     return raw_val
 
 
 # ------------------------- Accessor Object -----------------------------------
@@ -403,8 +431,8 @@ class NUMPY_10_FileHandles(object):
 
         destSlc = (self.slcExpr[self.hIdx], *(self.slcExpr[0:x] for x in array.shape))
         self.wFp[self.w_uid][destSlc] = array
-        hashVal = numpy_10_encode(uid=self.w_uid,
-                                  checksum=checksum,
-                                  collection_idx=self.hIdx,
-                                  shape=array.shape)
+        hashVal = NUMPY_10_DataHashSpec(uid=self.w_uid,
+                                        checksum=checksum,
+                                        collection_idx=self.hIdx,
+                                        shape=array.shape)
         return hashVal
