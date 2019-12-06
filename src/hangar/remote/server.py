@@ -21,6 +21,8 @@ from ..backends.selection import BACKEND_ACCESSOR_MAP, backend_decoder
 from ..records import commiting, hashs, heads, parsing, queries, summarize
 from ..records.hashmachine import array_hash_digest, metadata_hash_digest
 from ..utils import set_blosc_nthreads
+from ..records.parsing import RefDataKey, RefDataVal, RefMetadataKey, RefMetadataVal, RefSchemaKey, SchemaVal
+from ..records.parsing import HashDataKey, HashMetadataKey, HashMetadataVal, HashSchemaKey
 
 set_blosc_nthreads()
 
@@ -205,10 +207,10 @@ class HangarServer(hangar_service_pb2_grpc.HangarServiceServicer):
         """Return the raw byte specification of a particular schema with requested hash.
         """
         schema_hash = request.rec.digest
-        schemaKey = parsing.hash_schema_db_key_from_raw_key(schema_hash)
+        schemaKey = HashSchemaKey(schema_hash)
         hashTxn = self.txnregister.begin_reader_txn(self.env.hashenv)
         try:
-            schemaExists = hashTxn.get(schemaKey, default=False)
+            schemaExists = hashTxn.get(bytes(schemaKey), default=False)
             if schemaExists is not False:
                 print(f'found schema: {schema_hash}')
                 rec = hangar_service_pb2.SchemaRecord(digest=schema_hash, blob=schemaExists)
@@ -293,8 +295,8 @@ class HangarServer(hangar_service_pb2_grpc.HangarServiceServicer):
         try:
             fetch_max_nbytes = int(self.CFG['SERVER_GRPC']['fetch_max_nbytes'])
             for digest in unpacked_digests:
-                hashKey = parsing.hash_data_db_key_from_raw_key(digest)
-                hashVal = hashTxn.get(hashKey, default=False)
+                hashKey = HashDataKey(digest)
+                hashVal = hashTxn.get(bytes(hashKey), default=False)
                 if hashVal is False:
                     msg = f'HASH DOES NOT EXIST: {hashKey}'
                     context.set_details(msg)
@@ -393,10 +395,10 @@ class HangarServer(hangar_service_pb2_grpc.HangarServiceServicer):
         rec = hangar_service_pb2.HashRecord(digest=digest, type=digest_type)
         reply = hangar_service_pb2.FetchLabelReply(rec=rec)
 
-        labelKey = parsing.hash_meta_db_key_from_raw_key(digest)
+        labelKey = HashMetadataKey(digest)
         labelTxn = self.txnregister.begin_reader_txn(self.env.labelenv)
         try:
-            labelVal = labelTxn.get(labelKey, default=False)
+            labelVal = labelTxn.get(bytes(labelKey), default=False)
             if labelVal is False:
                 msg = f'DOES NOT EXIST: labelval with key: {labelKey}'
                 context.set_code(grpc.StatusCode.NOT_FOUND)
@@ -599,7 +601,7 @@ class HangarServer(hangar_service_pb2_grpc.HangarServiceServicer):
         c_hashs_raw = chunks.deserialize_record_pack(uncompBytes)
         c_hashset = set([chunks.deserialize_ident(raw).digest for raw in c_hashs_raw])
         s_hash_keys = list(hashs.HashQuery(self.env.labelenv).list_all_hash_keys_db())
-        s_hashes = map(parsing.hash_meta_raw_key_from_db_key, s_hash_keys)
+        s_hashes = map(str, map(HashMetadataKey.from_bytes, s_hash_keys))
         s_hashset = set(s_hashes)
 
         s_missing = list(c_hashset.difference(s_hashset))

@@ -4,6 +4,7 @@ from . import parsing
 from .. import constants as c
 from ..context import TxnRegister
 from ..backends.selection import BACKEND_ACCESSOR_MAP
+from ..records.parsing import HashDataKey, HashSchemaKey
 
 
 class HashQuery(object):
@@ -63,7 +64,7 @@ class HashQuery(object):
 
     def list_all_hash_keys_raw(self):
         recs = self._traverse_all_hash_records()
-        out = list(map(parsing.hash_data_raw_key_from_db_key, recs))
+        out = list(map(str, map(HashDataKey.from_bytes, recs)))
         return out
 
     def list_all_hash_keys_db(self):
@@ -72,7 +73,7 @@ class HashQuery(object):
 
     def list_all_schema_keys_raw(self):
         recs = self._traverse_all_schema_records()
-        out = list(map(parsing.hash_schema_raw_key_from_db_key, recs))
+        out = list(map(str, map(HashSchemaKey.from_bytes, recs)))
         return out
 
 

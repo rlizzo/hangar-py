@@ -5,6 +5,9 @@ import numpy as np
 from ..context import Environments, TxnRegister
 from ..backends import BACKEND_ACCESSOR_MAP, backend_opts_from_heuristics
 from ..records import parsing
+from ..records.parsing import RefDataKey, RefDataVal, RefMetadataKey, RefMetadataVal, RefSchemaKey, SchemaVal
+from ..records.parsing import HashDataKey, HashMetadataKey, HashMetadataVal, HashSchemaKey
+
 
 
 class ContentWriter(object):
@@ -78,10 +81,10 @@ class ContentWriter(object):
 
             False if the schema_hash existed in db and no records written.
         """
-        schemaKey = parsing.hash_schema_db_key_from_raw_key(schema_hash)
+        schemaKey = HashSchemaKey(schema_hash)
         hashTxn = TxnRegister().begin_writer_txn(self.env.hashenv)
         try:
-            schemaExists = hashTxn.put(schemaKey, schemaVal, overwrite=False)
+            schemaExists = hashTxn.put(bytes(schemaKey), schemaVal, overwrite=False)
         finally:
             TxnRegister().commit_writer_txn(self.env.hashenv)
 
@@ -115,13 +118,13 @@ class ContentWriter(object):
         List[str]
             list of str of all data digests written by this method.
         """
-        schemaKey = parsing.hash_schema_db_key_from_raw_key(schema_hash)
+        schemaKey = HashSchemaKey(schema_hash)
         hashTxn = TxnRegister().begin_reader_txn(self.env.hashenv)
         try:
-            schemaVal = hashTxn.get(schemaKey)
+            schemaVal = hashTxn.get(bytes(schemaKey))
         finally:
             TxnRegister().abort_reader_txn(self.env.hashenv)
-        schema_val = parsing.arrayset_record_schema_raw_val_from_db_val(schemaVal)
+        schema_val = SchemaVal.from_bytes(schemaVal)
 
         if backend is not None:
             if backend not in BACKEND_ACCESSOR_MAP:
@@ -155,8 +158,8 @@ class ContentWriter(object):
         try:
             for hdigest, tensor in received_data:
                 hashVal = be_accessor.write_data(tensor, remote_operation=True)
-                hashKey = parsing.hash_data_db_key_from_raw_key(hdigest)
-                hashTxn.put(hashKey, hashVal)
+                hashKey = HashDataKey(hdigest)
+                hashTxn.put(bytes(hashKey), bytes(hashVal))
                 saved_digests.append(hdigest)
         finally:
             be_accessor.close()
@@ -181,10 +184,10 @@ class ContentWriter(object):
             False if some content already exists with the same digest in the
             db and no operation was performed.
         """
-        labelHashKey = parsing.hash_meta_db_key_from_raw_key(digest)
+        labelHashKey = HashMetadataKey(digest)
         labelTxn = TxnRegister().begin_writer_txn(self.env.labelenv)
         try:
-            labelExists = labelTxn.put(labelHashKey, labelVal, overwrite=False)
+            labelExists = labelTxn.put(bytes(labelHashKey), bytes(labelVal), overwrite=False)
         finally:
             TxnRegister().commit_writer_txn(self.env.labelenv)
 
@@ -264,10 +267,10 @@ class ContentReader(object):
 
             False if the schema_hash does not exist in the db.
         """
-        schemaKey = parsing.hash_schema_db_key_from_raw_key(schema_hash)
+        schemaKey = HashSchemaKey(schema_hash)
         hashTxn = TxnRegister().begin_reader_txn(self.env.hashenv)
         try:
-            schemaVal = hashTxn.get(schemaKey, default=False)
+            schemaVal = hashTxn.get(bytes(schemaKey), default=False)
         finally:
             TxnRegister().abort_reader_txn(self.env.hashenv)
 
@@ -289,10 +292,10 @@ class ContentReader(object):
 
             False if the digest does not exist in the db.
         """
-        labelKey = parsing.hash_meta_db_key_from_raw_key(digest)
+        labelKey = HashMetadataKey(digest)
         labelTxn = TxnRegister().begin_reader_txn(self.env.labelenv)
         try:
-            labelVal = labelTxn.get(labelKey, default=False)
+            labelVal = labelTxn.get(bytes(labelKey), default=False)
         finally:
             TxnRegister().abort_reader_txn(self.env.labelenv)
 

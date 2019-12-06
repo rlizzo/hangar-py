@@ -769,7 +769,7 @@ class ArraysetDataWriter(ArraysetDataReader):
             if existingDataRecVal:
                 # check if data record already with same key & hash value
                 existingDataRec = RefDataVal.from_bytes(existingDataRecVal)
-                if full_hash == existingDataRec.data_hash:
+                if full_hash == existingDataRec.digest:
                     return name
 
             # write new data if data hash does not exist
