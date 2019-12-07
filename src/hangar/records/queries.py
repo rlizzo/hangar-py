@@ -245,7 +245,7 @@ class RecordQuery(object):
             all hash values for all data pieces in the arrayset
         """
         recs = self._traverse_arrayset_data_records(arrayset_name)
-        data_val_rec = map(RefDataVal.from_bytes, recs.values())
+        data_val_rec = map(str, map(RefDataVal.from_bytes, recs.values()))
         all_hashes = set(data_val_rec)
         return all_hashes
 
@@ -337,7 +337,7 @@ class RecordQuery(object):
             aset_schema_spec = self.arrayset_schema_spec(asetn)
             aset_schema_hash = aset_schema_spec.schema_hash
             for aset_hash_val in aset_hash_vals:
-                odict[aset_hash_val.digest] = aset_schema_hash
+                odict[aset_hash_val] = aset_schema_hash
 
         return odict
 
@@ -393,7 +393,7 @@ class RecordQuery(object):
         all_hashes = []
         if len(recs) > 0:
             meta_rec_vals = map(RefMetadataVal.from_bytes, recs.values())
-            meta_hashs = map(lambda x: x.meta_hash, meta_rec_vals)
+            meta_hashs = map(lambda x: x.digest, meta_rec_vals)
             all_hashes.extend(meta_hashs)
         return all_hashes
 

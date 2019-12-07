@@ -269,11 +269,7 @@ HDF5_01_DataHashSpecBase = NamedTuple('HDF5_01_DataHashSpecBase', [
 
 
 class HDF5_01_DataHashSpec(HDF5_01_DataHashSpecBase):
-
     __slots__ = ()
-
-    def __new__(cls, uid, checksum, dataset, dataset_idx, shape):
-        return super().__new__(cls, _FmtCode, uid, checksum, dataset, dataset_idx, shape)
 
     def __bytes__(self):
         out_str = f'{_FmtCode}{c.SEP_KEY}'\
@@ -287,85 +283,8 @@ class HDF5_01_DataHashSpec(HDF5_01_DataHashSpecBase):
         db_str = raw.decode()
         _, uid, checksum, dataset_vs, shape_vs = _SplitDecoderRE.split(db_str)
         dataset, dataset_idx = dataset_vs.split(' ')
-        # if the data is of empty shape -> shape_vs = '' str.split() default value
-        # of none means split according to any whitespace, and discard empty strings
-        # from the result. So long as c.SEP_LST = ' ' this will work
         shape = tuple(map(int, shape_vs.split()))
-        return cls(uid=uid,
-                   checksum=checksum,
-                   dataset=dataset,
-                   dataset_idx=int(dataset_idx),
-                   shape=shape)
-
-
-# HDF5_01_DataHashSpec = NamedTuple('HDF5_01_DataHashSpec', [
-#     ('backend', str),
-#     ('uid', str),
-#     ('checksum', str),
-#     ('dataset', str),
-#     ('dataset_idx', int),
-#     ('shape', Tuple[int])])
-
-
-# def hdf5_01_encode(uid: str, checksum: str, dataset: str, dataset_idx: int,
-#                    shape: Tuple[int]) -> bytes:
-#     """converts the hdf5 data has spec to an appropriate db value
-
-#     Parameters
-#     ----------
-#     uid : str
-#         the file name prefix which the data is written to.
-#     checksum : int
-#         xxhash_64.hex_digest checksum of the data bytes in numpy array form.
-#     dataset : str
-#         collection (ie. hdf5 dataset) name to find this data piece.
-#     dataset_idx : int
-#         collection first axis index in which this data piece resides.
-#     shape : Tuple[int]
-#         shape of the data sample written to the collection idx. ie:
-#         what subslices of the hdf5 dataset should be read to retrieve
-#         the sample as recorded.
-
-#     Returns
-#     -------
-#     bytes
-#         hash data db value recording all input specifications.
-#     """
-#     out_str = f'{_FmtCode}{c.SEP_KEY}'\
-#               f'{uid}{c.SEP_HSH}{checksum}{c.SEP_HSH}'\
-#               f'{dataset}{c.SEP_LST}{dataset_idx}{c.SEP_SLC}'\
-#               f'{_ShapeFmtRE.sub("", str(shape))}'
-#     return out_str.encode()
-
-
-# def hdf5_01_decode(db_val: bytes) -> HDF5_01_DataHashSpec:
-#     """converts an hdf5 data hash db val into an hdf5 data python spec.
-
-#     Parameters
-#     ----------
-#     db_val : bytestring
-#         data hash db value
-
-#     Returns
-#     -------
-#     HDF5_01_DataHashSpec
-#         hdf5 data hash specification containing `backend`, `schema`,
-#         `instance`, `dataset`, `dataset_idx`, `shape`
-#     """
-#     db_str = db_val.decode()
-#     _, uid, checksum, dataset_vs, shape_vs = _SplitDecoderRE.split(db_str)
-#     dataset, dataset_idx = dataset_vs.split(c.SEP_LST)
-#     # if the data is of empty shape -> shape_vs = '' str.split() default value
-#     # of none means split according to any whitespace, and discard empty strings
-#     # from the result. So long as c.SEP_LST = ' ' this will work
-#     shape = tuple(map(int, shape_vs.split()))
-#     raw_val = HDF5_01_DataHashSpec(backend=_FmtCode,
-#                                    uid=uid,
-#                                    checksum=checksum,
-#                                    dataset=dataset,
-#                                    dataset_idx=int(dataset_idx),
-#                                    shape=shape)
-#     return raw_val
+        return cls(_FmtCode, uid, checksum, dataset, int(dataset_idx), shape)
 
 
 # ------------------------- Accessor Object -----------------------------------
@@ -821,7 +740,8 @@ class HDF5_01_FileHandles(object):
             self._create_schema(remote_operation=remote_operation)
 
         self.wFp[self.w_uid][f'/{self.hNextPath}'][self.hIdx] = array
-        hashVal = HDF5_01_DataHashSpec(uid=self.w_uid,
+        hashVal = HDF5_01_DataHashSpec(backend=_FmtCode,
+                                       uid=self.w_uid,
                                        checksum=checksum,
                                        dataset=self.hNextPath,
                                        dataset_idx=self.hIdx,

@@ -18,6 +18,8 @@ from .remote.content import ContentWriter, ContentReader
 from .backends import backend_decoder
 from .records import heads, summarize, commiting, queries, parsing
 from .utils import is_suitable_user_key
+from .records.parsing import RefDataKey, RefDataVal, RefMetadataKey, RefMetadataVal, RefSchemaKey, SchemaVal
+from .records.parsing import HashDataKey, HashMetadataKey, HashMetadataVal, HashSchemaKey
 
 logger = logging.getLogger(__name__)
 
@@ -377,11 +379,11 @@ class Remotes(object):
         try:
             m_schema_hash_map = defaultdict(list)
             for hashVal in allHashs:
-                hashKey = parsing.hash_data_db_key_from_raw_key(hashVal.data_hash)
-                hashRef = hashTxn.get(hashKey)
+                hashKey = HashDataKey(hashVal)
+                hashRef = hashTxn.get(bytes(hashKey))
                 be_loc = backend_decoder(hashRef)
                 if be_loc.backend == '50':
-                    m_schema_hash_map[be_loc.schema_hash].append(hashVal.data_hash)
+                    m_schema_hash_map[be_loc.schema_hash].append(hashVal)
         finally:
             TxnRegister().abort_reader_txn(self._env.hashenv)
 

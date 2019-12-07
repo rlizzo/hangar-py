@@ -395,6 +395,9 @@ class HashSchemaKey(DataDigest):
     def __bytes__(self) -> bytes:
         return f'{c.K_SCHEMA}{self.digest}'.encode()
 
+    def __str__(self):
+        return self.digest
+
     @classmethod
     def from_bytes(cls, raw: bytes):
         return cls(raw.decode().replace(c.K_SCHEMA, '', 1))

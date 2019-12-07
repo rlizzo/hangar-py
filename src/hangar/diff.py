@@ -179,7 +179,7 @@ def _raw_from_db_change(changes: Set[Tuple[bytes, bytes]]) -> Changes:
         elif k.startswith(b's:'):
             rk = RefSchemaKey.from_bytes(k)
             rv = SchemaVal.from_bytes(v)
-            schema[rk] = rv
+            schema[rk.aset_name] = rv
             continue
     return Changes(schema=schema, samples=arraysets, metadata=metadata)
 
