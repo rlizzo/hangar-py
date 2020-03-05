@@ -8,6 +8,7 @@ from pathlib import Path
 
 import lmdb
 
+from .column_parsers import metadata_range_key
 from .heads import (
     get_branch_head_commit,
     get_staging_branch_head,
@@ -37,6 +38,7 @@ from ..constants import (
     SEP_KEY,
 )
 from ..txnctx import TxnRegister
+from ..utils import remove
 
 """
 Reading commit specifications and parents.
@@ -558,6 +560,58 @@ def commit_records(message, branchenv, stageenv, refenv, repo_path: Path,
 
 
 # --------------------- staging setup, may need to move this elsewhere ------------------
+
+
+def delete_metadata_records_from_staging_area(stageenv):
+    """Removes all metadata key/value pairs from a staging area db.
+
+    Parameters
+    ----------
+    stageenv : lmdb.Environment
+        lmdb Enviornment of the staging area
+    """
+    startRangeKey = metadata_range_key()
+    len_RangeKey = len(startRangeKey)
+    stagetxn = TxnRegister().begin_writer_txn(stageenv, buffer=True)
+    try:
+        with stagetxn.cursor() as cursor:
+            rangeItemsExist = cursor.set_range(startRangeKey)
+            if not rangeItemsExist:
+                # break out prematurely in the case where no matching items exist.
+                return
+
+            while rangeItemsExist:
+                recKey = cursor.key()
+                if recKey[0:len_RangeKey] == startRangeKey:
+                    rangeItemsExist = cursor.delete()
+                    continue
+                else:
+                    rangeItemsExist = False
+    finally:
+        TxnRegister().commit_writer_txn(stageenv)
+
+
+def filter_metadata_refs_from_iterable(db_ref_kvs):
+    """remove metadata records from iterable of content kv refs.
+
+    Parameters
+    ----------
+    db_ref_kvs: Iterable[Tuple[bytes, bytes]]
+        Input iterable mapping db formatted keys to values
+
+    Returns
+    -------
+    Iterable[Tuple[bytes, bytes]]
+        Iterable of kv refs with metadata records removed from sequence.
+    """
+    startRangeKey = metadata_range_key()
+    len_RangeKey = len(startRangeKey)
+
+    def _is_metadata_key(db_key):
+        return db_key[0][0:len_RangeKey] == startRangeKey
+
+    res = remove(_is_metadata_key, db_ref_kvs)
+    return res
 
 
 def replace_staging_area_with_commit(refenv, stageenv, commit_hash):

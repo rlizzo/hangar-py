@@ -14,6 +14,7 @@ from .records import (
     MetadataRecordKey,
 )
 from .records.commiting import (
+    filter_metadata_refs_from_iterable,
     check_commit_hash_in_history,
     get_commit_ancestors_graph,
     get_commit_ref,
@@ -35,9 +36,18 @@ class HistoryDiffStruct(NamedTuple):
 
 
 class Changes(NamedTuple):
+    """All changes recorded across both columns (schema/samples) and metadata.
+    """
     schema: dict
     samples: tuple
     metadata: tuple
+
+
+class ColumnChanges(NamedTuple):
+    """changes which occured in columns (schema/samples), no metadata included.
+    """
+    schema: dict
+    samples: tuple
 
 
 class DiffOutDB(NamedTuple):
@@ -189,9 +199,11 @@ def _raw_from_db_change(changes: Set[Tuple[bytes, bytes]]) -> Changes:
         elif k[:2] == b'l:':
             metadataKeys.append(k)
             continue
-        else:  # k[:2] == b's:'
+        elif k[:2] == b's:':
             schemaKeyVals.append((k, v))
             continue
+        else:
+            raise RuntimeError(f'unknown prefix for ref key {k} with val {v}')
 
     columndata = map(dynamic_layout_data_record_from_db_key, columnKeys)
     metadata = map(metadata_record_raw_key_from_db_key, metadataKeys)
@@ -674,6 +686,7 @@ class WriterUserDiff(BaseUserDiff):
             base_refs = ()
         else:
             base_refs = get_commit_ref(self._refenv, head_commit)
+        base_refs = tuple(filter_metadata_refs_from_iterable(base_refs))
 
         stage_refs = tuple(RecordQuery(self._stageenv)._traverse_all_records())
         status = 'DIRTY' if (base_refs != stage_refs) else 'CLEAN'

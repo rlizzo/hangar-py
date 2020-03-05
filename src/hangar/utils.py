@@ -144,6 +144,17 @@ def valfilterfalse(predicate, d, factory=dict):
     return rv
 
 
+def remove(predicate, seq):
+    """ Return those items of sequence for which predicate(item) is False
+
+    >>> def iseven(x):
+    ...     return x % 2 == 0
+    >>> list(remove(iseven, [1, 2, 3, 4]))
+    [1, 3]
+    """
+    return filterfalse(predicate, seq)
+
+
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
     a, b = tee(iterable)

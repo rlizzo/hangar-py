@@ -315,6 +315,14 @@ class MetadataWriter(MetadataReader):
         super().__init__(*args, **kwargs)
         self._dataenv: lmdb.Environment = kwargs['dataenv']
         self._dataTxn: Optional[lmdb.Transaction] = None
+        self._setup()
+
+    def _setup(self):
+        self._mspecs.clear()
+        metaNamesSpec = RecordQuery(self._dataenv).metadata_records()
+        for metaNames, metaSpec in metaNamesSpec:
+            labelKey = hash_meta_db_key_from_raw_key(metaSpec.digest)
+            self._mspecs[metaNames.key] = labelKey
 
     def __enter__(self):
         with ExitStack() as stack:

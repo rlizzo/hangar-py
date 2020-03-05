@@ -508,6 +508,7 @@ class WriterCheckout(GetMixin, CheckoutDictIteration):
                     raise e
                 commiting.replace_staging_area_with_commit(
                     refenv=self._refenv, stageenv=self._stageenv, commit_hash=cmt)
+                commiting.delete_metadata_records_from_staging_area(self._stageenv)
                 heads.set_staging_branch_head(
                     branchenv=self._branchenv, branch_name=self._branch_name)
 
@@ -1099,6 +1100,8 @@ class WriterCheckout(GetMixin, CheckoutDictIteration):
             # purge recs then reopen file handles so that we don't have to invalidate
             # previous weakproxy references like if we just called :meth:``_setup```
             hashs.clear_stage_hash_records(self._stagehashenv)
+            commiting.delete_metadata_records_from_staging_area(self._stageenv)
+            self._metadata._setup()
             self._columns._open()
 
         finally:
@@ -1162,6 +1165,7 @@ class WriterCheckout(GetMixin, CheckoutDictIteration):
             commiting.replace_staging_area_with_commit(refenv=self._refenv,
                                                        stageenv=self._stageenv,
                                                        commit_hash=head_commit)
+        commiting.delete_metadata_records_from_staging_area(self._stageenv)
 
         self._metadata = MetadataWriter(
             mode='a',

@@ -17,6 +17,7 @@ import lmdb
 
 from .diff import WriterUserDiff, diff_envs, find_conflicts
 from .records.commiting import (
+    delete_metadata_records_from_staging_area,
     tmp_cmt_env,
     replace_staging_area_with_commit,
     replace_staging_area_with_refs,
@@ -253,6 +254,10 @@ def _three_way_merge(message: str,
     """
     with tmp_cmt_env(refenv, ancestorHEAD) as aEnv, tmp_cmt_env(
             refenv, masterHEAD) as mEnv, tmp_cmt_env(refenv, devHEAD) as dEnv:
+
+        delete_metadata_records_from_staging_area(aEnv)
+        delete_metadata_records_from_staging_area(mEnv)
+        delete_metadata_records_from_staging_area(dEnv)
 
         m_diff = diff_envs(aEnv, mEnv)
         d_diff = diff_envs(aEnv, dEnv)
